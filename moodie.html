@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moodie HTML · Grok 小脸复刻</title>
+<style>
+  :root {
+    --bg: #0b0b0f;
+    --panel: rgba(255,255,255,0.05);
+    --border: rgba(255,255,255,0.09);
+    --text: #e8e8ee;
+    --muted: #8a8a96;
+    --accent: #dfff5b;
+    --accent2: #7cffb2;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: radial-gradient(1200px 800px at 50% -10%, #1a1a24, var(--bg) 60%);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+  header { text-align: center; padding: 28px 16px 4px; }
+  header h1 {
+    font-size: 26px; font-weight: 700; letter-spacing: 0.5px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header p { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  header p a { color: var(--accent); text-decoration: none; }
+
+  .stage {
+    width: min(560px, 92vw);
+    margin: 18px auto 8px;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 300px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  .stage svg { filter: drop-shadow(0 18px 40px rgba(0,0,0,0.45)); }
+
+  .hint { color: var(--muted); font-size: 12px; text-align: center; margin-bottom: 12px; }
+
+  .panel {
+    width: min(640px, 94vw);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+    backdrop-filter: blur(12px);
+  }
+  .panel-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--muted); margin-bottom: 10px; font-weight: 600;
+  }
+
+  /* 表情条 */
+  .rail { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rail button {
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .rail button:hover { background: rgba(255,255,255,0.12); transform: translateY(-1px); }
+  .rail button.active {
+    background: var(--accent); color: #151515; border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* 形状条 */
+  .shape-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .shape-btn {
+    width: 52px; height: 52px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .shape-btn:hover { background: rgba(255,255,255,0.12); transform: translateY(-1px); }
+  .shape-btn.active { border-color: var(--accent); background: rgba(223,255,91,0.12); box-shadow: 0 0 0 1px var(--accent); }
+  .shape-btn svg { width: 34px; height: 34px; }
+
+  /* 控制行 */
+  .ctrl-row { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+  .ctrl-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .ctrl-item input[type=color] {
+    width: 34px; height: 28px; border: 1px solid var(--border); border-radius: 8px;
+    background: transparent; cursor: pointer; padding: 2px;
+  }
+  .ctrl-item input[type=range] { width: 120px; accent-color: var(--accent); }
+  .switch { position: relative; width: 38px; height: 22px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider {
+    position: absolute; inset: 0; background: rgba(255,255,255,0.14);
+    border-radius: 999px; transition: 0.2s; cursor: pointer;
+  }
+  .switch .slider::before {
+    content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+    left: 3px; top: 3px; background: #fff; transition: 0.2s;
+  }
+  .switch input:checked + .slider { background: var(--accent); }
+  .switch input:checked + .slider::before { transform: translateX(16px); }
+
+  footer { color: var(--muted); font-size: 11px; padding: 14px 0 26px; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Moodie · 会变脸的小球</h1>
+  <p>Grok Bot 同款动画小脸的 HTML 复刻 · 灵感来自 <a href="https://github.com/arhxam/moodie-react" target="_blank">arhxam/moodie-react</a> · 点它试试！</p>
+</header>
+
+<div class="stage" id="stage">
+  <svg id="face" width="300" height="300" viewBox="0 0 200 200" aria-label="Animated mood">
+    <defs>
+      <linearGradient id="bodyGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="var(--grad-a, #eaff8a)"/>
+        <stop offset="100%" stop-color="var(--grad-b, #b8ff5b)"/>
+      </linearGradient>
+      <clipPath id="bodyClip"><path id="clipPath"/></clipPath>
+    </defs>
+    <!-- 身体 -->
+    <g id="bodyGroup" style="transform-origin: 100px 100px;">
+      <path id="bodyPath" fill="url(#bodyGrad)" stroke="rgba(0,0,0,0.08)" stroke-width="1.5"/>
+    </g>
+    <!-- 眼睛（带眨眼缩放组） -->
+    <g id="eyeGroup" style="transform-origin: 100px 96px;">
+      <path id="leftEye" fill="#151515"/>
+      <path id="rightEye" fill="#151515"/>
+    </g>
+    <!-- 高光点缀 -->
+    <g id="glossGroup" style="transform-origin: 100px 100px;">
+      <ellipse id="gloss" cx="70" cy="66" rx="16" ry="10" fill="rgba(255,255,255,0.28)" transform="rotate(-18 70 66)"/>
+    </g>
+  </svg>
+</div>
+
+<p class="hint">左键 = 表情反应 · 右键 = 切换形状 · 鼠标移动 = 眼睛跟着你</p>
+
+<div class="panel">
+  <div class="panel-title">表情（16 种）</div>
+  <div class="rail" id="exprRail"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">形状（11 种 · 右键脸也可切换）</div>
+  <div class="shape-row" id="shapeRow"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">外观</div>
+  <div class="ctrl-row">
+    <label class="ctrl-item">身体 <input type="color" id="colorBody" value="#dfff5b"></label>
+    <label class="ctrl-item">眼睛 <input type="color" id="colorEye" value="#151515"></label>
+    <label class="ctrl-item">大小 <input type="range" id="sizeRange" min="80" max="420" value="300"></label>
+    <label class="ctrl-item">自动变脸 <span class="switch"><input type="checkbox" id="autoToggle"><span class="slider"></span></span></label>
+  </div>
+</div>
+
+<footer>Moodie HTML 复刻版 · 纯代码实现，无任何图片资源 · 原项目 MIT 协议</footer>
+
+<script>
+"use strict";
+/* ============================================================
+   Moodie HTML —— 复刻 arhxam/moodie-react 的核心动画机制
+   ============================================================ */
+
+// ---------- 工具 ----------
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const round = v => Math.round(v * 1000) / 1000;
+
+// ---------- 几何：Catmull-Rom 闭环 → 三次贝塞尔路径 ----------
+function createClosedPath(points, tension = 1) {
+  if (points.length < 3) return "";
+  const t = clamp(tension, 0, 2, 1);
+  const first = points[0];
+  let path = `M${round(first[0])},${round(first[1])}`;
+  for (let i = 0; i < points.length; i++) {
+    const prev = points[(i - 1 + points.length) % points.length];
+    const cur = points[i];
+    const next = points[(i + 1) % points.length];
+    const after = points[(i + 2) % points.length];
+    const c1 = [cur[0] + ((next[0] - prev[0]) / 6) * t, cur[1] + ((next[1] - prev[1]) / 6) * t];
+    const c2 = [next[0] - ((after[0] - cur[0]) / 6) * t, next[1] - ((after[1] - cur[1]) / 6) * t];
+    path += `C${round(c1[0])},${round(c1[1])} ${round(c2[0])},${round(c2[1])} ${round(next[0])},${round(next[1])}`;
+  }
+  return path + "Z";
+}
+
+const centerPointLoop = points => {
+  const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+  const ox = (Math.min(...xs) + Math.max(...xs)) / 2 - 100;
+  const oy = (Math.min(...ys) + Math.max(...ys)) / 2 - 100;
+  return points.map(([x, y]) => [round(x - ox), round(y - oy)]);
+};
+
+const rotatePoint = (x, y, deg) => {
+  const r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+  return [round(x * c - y * s), round(x * s + y * c)];
+};
+
+// ---------- 形状（16 点） ----------
+const SHAPE_NAMES = ["circle","squircle","blob","pebble","diamond","oval","triangle","cloud","hexagon","square","drop"];
+const SHAPE_LABELS = { circle:"圆", squircle:"方圆", blob:"变形", pebble:"卵石", diamond:"菱", oval:"椭圆", triangle:"三角", cloud:"云朵", hexagon:"六边", square:"方块", drop:"水滴" };
+
+const REF_POINTS = {
+  oval: [[95,43],[118,42],[140,52],[153,69],[158,90],[157,111],[145,131],[123,146],[100,151],[76,148],[57,137],[46,119],[43,97],[47,75],[63,57],[80,47]],
+  triangle: [[94,42],[106,42],[120,58],[138,84],[155,110],[165,132],[164,144],[153,153],[126,155],[92,155],[61,155],[40,151],[35,139],[42,122],[56,98],[76,68]],
+  cloud: [[92,34],[114,54],[136,46],[151,58],[149,75],[168,82],[174,101],[164,117],[143,121],[130,136],[104,139],[78,130],[50,126],[42,104],[54,72],[72,78]],
+  hexagon: [[100,36],[111,38],[145,57],[158,68],[160,84],[160,116],[157,133],[145,145],[111,164],[100,167],[89,164],[55,145],[43,133],[40,116],[40,84],[55,57]],
+  square: [[100,34],[130,35],[151,41],[162,54],[166,76],[166,116],[162,141],[151,157],[128,164],[87,164],[62,159],[46,148],[38,127],[38,83],[43,57],[61,41]],
+  drop: [[96,28],[104,28],[114,41],[124,59],[136,78],[146,101],[150,123],[148,142],[137,157],[119,166],[98,168],[78,163],[63,153],[53,137],[52,119],[63,94]],
+};
+const REF_TENSION = { oval:0.8, triangle:0.46, cloud:0.9, hexagon:0.44, square:0.58, drop:0.78 };
+
+function makeShapePoints(name) {
+  if (REF_POINTS[name]) {
+    const pts = REF_POINTS[name].map(([x, y]) => [x, y]);
+    // 居中（同原版 centerPointLoopForPath）
+    return centerPointLoop(pts);
+  }
+  const exponent = name === "squircle" ? 4.6 : name === "diamond" ? 1.12 : 2;
+  const points = [];
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2 - Math.PI / 2;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const ux = Math.sign(cos) * Math.pow(Math.abs(cos), 2 / exponent);
+    const uy = Math.sign(sin) * Math.pow(Math.abs(sin), 2 / exponent);
+    let rx = 88, ry = 88, ox = 0, oy = 0;
+    if (name === "blob") {
+      const w = 1 + Math.sin(angle * 3 + 0.7) * 0.045 + Math.cos(angle * 2 - 0.4) * 0.025;
+      rx *= w; ry *= 1 / w; oy = 2;
+    }
+    if (name === "pebble") {
+      rx = 90; ry = 76 + (sin < 0 ? 6 : -1); ox = sin * 4; oy = 6;
+    }
+    points.push([round(100 + ox + ux * rx), round(100 + oy + uy * ry)]);
+  }
+  return centerPointLoop(points);
+}
+
+const shapeTension = name => name === "diamond" ? 0.28 : name === "squircle" ? 0.72 : (REF_TENSION[name] ?? 1);
+const shapePointsCache = {};
+SHAPE_NAMES.forEach(n => shapePointsCache[n] = makeShapePoints(n));
+
+// ---------- 眼睛（12 点超椭圆） ----------
+function createEyePoints(g) {
+  const cx = clamp(g.x, -100, 300, 0), cy = clamp(g.y, -100, 300, 0);
+  const w = clamp(g.width, 2, 120, 24), h = clamp(g.height, 2, 120, 44);
+  const rot = clamp(g.rotation, -180, 180, 0);
+  const curve = clamp(g.curve, 0, 1, 0.78);
+  const skew = clamp(g.skew, -1, 1, 0);
+  const exp = 2 + curve * 2.4;
+  const pts = [];
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const lx = Math.sign(cos) * Math.pow(Math.abs(cos), 2 / exp) * (w / 2) + sin * skew * (h / 5);
+    const ly = Math.sign(sin) * Math.pow(Math.abs(sin), 2 / exp) * (h / 2);
+    const [rx, ry] = rotatePoint(lx, ly, rot);
+    pts.push([round(cx + rx), round(cy + ry)]);
+  }
+  return pts;
+}
+const eyePath = g => createClosedPath(createEyePoints(g), 0.82 + clamp(g.curve,0,1,0.78) * 0.12);
+
+// ---------- 16 种表情预设 ----------
+const eye = (x, y, width, height, rotation = 0, curve = 0.8, skew = 0) => ({ x, y, width, height, rotation, curve, skew });
+const EXPRESSIONS = {
+  neutral:   { label:"中性",   left: eye(72,94,22,42,-5),          right: eye(128,94,22,42,5),           body:{} },
+  happy:     { label:"开心",   left: eye(72,100,31,13,7,0.38),      right: eye(128,100,31,13,-7,0.38),    body:{ y:-2 } },
+  excited:   { label:"兴奋",   left: eye(70,96,29,53,-9,0.92),      right: eye(130,96,29,53,9,0.92),      body:{ scaleX:1.03, scaleY:0.97 } },
+  sleepy:    { label:"困了",   left: eye(72,100,35,8,2,0.25),       right: eye(128,100,35,8,-2,0.25),     body:{ rotate:-3, y:4 } },
+  sad:       { label:"难过",   left: eye(72,103,24,35,-17,0.72),    right: eye(128,103,24,35,17,0.72),    body:{ y:4, scaleX:0.98, scaleY:1.02 } },
+  worried:   { label:"担心",   left: eye(72,96,22,38,16,0.76),      right: eye(128,96,22,38,-16,0.76),    body:{} },
+  thinking:  { label:"思考",   left: eye(68,91,17,30,-18,0.88),     right: eye(126,101,32,15,-24,0.46),   body:{ rotate:-4 } },
+  love:      { label:"喜欢",   left: eye(72,96,34,34,-8,0.18,-0.38),right: eye(128,96,34,34,8,0.18,0.38), body:{ scaleX:1.02, scaleY:0.98 } },
+  curious:   { label:"好奇",   left: eye(70,89,18,34,-12,0.85),     right: eye(130,100,31,47,10,0.84),    body:{ rotate:5 } },
+  surprised: { label:"惊讶",   left: eye(72,95,34,52,0,1),          right: eye(128,95,34,52,0,1),         body:{ scaleX:0.96, scaleY:1.04 } },
+  focused:   { label:"专注",   left: eye(72,97,31,13,14,0.4),       right: eye(128,97,31,13,-14,0.4),     body:{ scaleX:1.01 } },
+  cheeky:    { label:"得意",   left: eye(72,94,28,13,10,0.35),      right: eye(128,95,21,42,8,0.84),      body:{ rotate:4 } },
+  dizzy:     { label:"头晕",   left: eye(70,96,37,12,42,0.25),      right: eye(130,96,37,12,-42,0.25),    body:{} },
+  calm:      { label:"平静",   left: eye(72,99,34,9,0,0.3),         right: eye(128,99,34,9,0,0.3),        body:{ scaleX:1.01, scaleY:0.99 } },
+  wink:      { label:"眨眼",   left: eye(72,99,35,8,8,0.25),        right: eye(128,95,23,43,4,0.85),      body:{ rotate:3 } },
+  alert:     { label:"警觉",   left: eye(72,91,21,48,-3,0.9),       right: eye(128,91,21,48,3,0.9),       body:{ y:-3, scaleY:1.02 } },
+};
+const REACTIONS = { neutral:"none", happy:"bounce", excited:"bounce", sleepy:"tilt", sad:"squash", worried:"tilt", thinking:"tilt", love:"bounce", curious:"tilt", surprised:"bounce", focused:"squash", cheeky:"tilt", dizzy:"spin", calm:"none", wink:"bounce", alert:"bounce" };
+
+// ---------- 弹簧 ----------
+class Spring {
+  constructor(value, stiffness = 210, damping = 22, mass = 0.8) {
+    this.x = value; this.v = 0;
+    this.stiffness = stiffness; this.damping = damping; this.mass = mass;
+  }
+  step(target, dt) {
+    const a = (-this.stiffness * (this.x - target) - this.damping * this.v) / this.mass;
+    this.v += a * dt;
+    this.x += this.v * dt;
+    return this.x;
+  }
+}
+
+// ---------- 状态 ----------
+const svg = document.getElementById("face");
+const bodyPath = document.getElementById("bodyPath");
+const leftEye = document.getElementById("leftEye");
+const rightEye = document.getElementById("rightEye");
+const bodyGroup = document.getElementById("bodyGroup");
+const eyeGroup = document.getElementById("eyeGroup");
+const glossGroup = document.getElementById("glossGroup");
+const stage = document.getElementById("stage");
+
+let currentExprName = "neutral";
+let currentShapeName = "circle";
+let autoOn = false;
+let autoTimer = null;
+
+// 目标表达式
+const expr = EXPRESSIONS[currentExprName];
+
+// 眼睛弹簧（左 7 参数 + 右 7 参数）
+const leftSprings = { x:new Spring(expr.left.x), y:new Spring(expr.left.y), w:new Spring(expr.left.width), h:new Spring(expr.left.height), r:new Spring(expr.left.rotation), c:new Spring(expr.left.curve), s:new Spring(expr.left.skew) };
+const rightSprings = { x:new Spring(expr.right.x), y:new Spring(expr.right.y), w:new Spring(expr.right.width), h:new Spring(expr.right.height), r:new Spring(expr.right.rotation), c:new Spring(expr.right.curve), s:new Spring(expr.right.skew) };
+
+// 身体弹簧
+const bodySprings = { y:new Spring(0), rotate:new Spring(0), scaleX:new Spring(1), scaleY:new Spring(1) };
+
+// 形状弹簧（16 点插值）
+const shapeSprings = Array.from({ length: 16 }, () => ({
+  x: new Spring(shapePointsCache[currentShapeName][0][0]),
+  y: new Spring(shapePointsCache[currentShapeName][0][1]),
+}));
+// 初始化所有点的 target（否则 step(target=undefined) 产生 NaN）
+(function initShapeTargets() {
+  const pts = shapePointsCache[currentShapeName];
+  for (let i = 0; i < 16; i++) {
+    shapeSprings[i].x.target = pts[i][0];
+    shapeSprings[i].y.target = pts[i][1];
+  }
+})();
+
+// 眨眼
+let blinkProgress = 1; // 1=睁眼 0=闭眼
+let blinkTimer = null;
+
+// 注视（鼠标）
+let pointer = { x: 100, y: 100 };
+let eyeOffset = { x: new Spring(0, 150, 20, 0.8), y: new Spring(0, 150, 20, 0.8) };
+let tilt = new Spring(0, 150, 20, 0.8);
+
+// 反应动画
+let reaction = null; // { type, t, dur }
+const reactionFrames = {
+  bounce: { y:   [0,-11,3.5,-1,0], rotate:[0,-2.5,2,-0.7,0], scale:[1,0.96,1.025,0.99,1] },
+  squash: { scaleX:[1,1.045,0.978,1.012,1], scaleY:[1,0.95,1.028,0.992,1], y:[0,5,-3,1,0] },
+  tilt:   { rotate:[0,-8,6,-2,0], y:[0,3,-2,0.5,0] },
+  spin:   { rotate:[0,14,-12,7,0], scale:[1,0.93,1.045,0.985,1] },
+};
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+
+// 眼睛特效（表情切换时的临时动画）
+let eyeEffect = null; // { fn(p) -> {left:{dx,dy,scale,rot}, right:{...}}, t, dur }
+function makeEffect(dur, fn) { eyeEffect = { fn, t: 0, dur }; }
+const EXPR_EYE_EFFECTS = {
+  cheeky: () => makeEffect(600, p => {
+    const swing = Math.sin(p * Math.PI);
+    return { left: { dx: 0, dy: 0, scale: 1, rot: -10 * swing }, right: { dx: 0, dy: 0, scale: 1, rot: 10 * swing } };
+  }),
+  dizzy: () => makeEffect(700, p => {
+    const a = p * Math.PI * 2 * 1.5;
+    return { left: { dx: 4 * Math.cos(a) * (1 - p), dy: 4 * Math.sin(a) * (1 - p), scale: 1, rot: 0 }, right: { dx: -4 * Math.cos(a) * (1 - p), dy: -4 * Math.sin(a) * (1 - p), scale: 1, rot: 0 } };
+  }),
+  sleepy: () => makeEffect(500, p => {
+    const droop = Math.sin(p * Math.PI) * 0.55;
+    return { left: { dx: 0, dy: 0, scale: 1, rot: 0, eyeScaleY: 1 - droop }, right: { dx: 0, dy: 0, scale: 1, rot: 0, eyeScaleY: 1 - droop } };
+  }),
+  surprised: () => makeEffect(500, p => {
+    const s = 1 - 0.35 * Math.sin(p * Math.PI);
+    return { left: { dx: 0, dy: 0, scale: s, rot: 0 }, right: { dx: 0, dy: 0, scale: s, rot: 0 } };
+  }),
+  alert: () => makeEffect(600, p => {
+    const shift = Math.sin(p * Math.PI * 2) * 6;
+    return { left: { dx: shift, dy: 0, scale: 1, rot: 0 }, right: { dx: shift, dy: 0, scale: 1, rot: 0 } };
+  }),
+};
+
+// ---------- 设置表情 / 形状 ----------
+function setExpression(name, triggerEffect = true) {
+  if (!EXPRESSIONS[name]) return;
+  currentExprName = name;
+  const target = EXPRESSIONS[name];
+  const apply = (springs, g) => {
+    springs.x.stiffness = springs.y.stiffness = springs.w.stiffness = springs.h.stiffness = springs.r.stiffness = springs.c.stiffness = springs.s.stiffness = 240;
+    springs.x.damping = springs.y.damping = springs.w.damping = springs.h.damping = springs.r.damping = springs.c.damping = springs.s.damping = 22;
+    springs.x.target = g.x; springs.y.target = g.y; springs.w.target = g.width; springs.h.target = g.height;
+    springs.r.target = g.rotation; springs.c.target = g.curve; springs.s.target = g.skew;
+  };
+  apply(leftSprings, target.left);
+  apply(rightSprings, target.right);
+  bodySprings.y.target = target.body.y ?? 0;
+  bodySprings.rotate.target = target.body.rotate ?? 0;
+  bodySprings.scaleX.target = target.body.scaleX ?? 1;
+  bodySprings.scaleY.target = target.body.scaleY ?? 1;
+  if (triggerEffect && EXPR_EYE_EFFECTS[name]) EXPR_EYE_EFFECTS[name]();
+  updateRail();
+}
+
+function setShape(name) {
+  if (!shapePointsCache[name]) return;
+  currentShapeName = name;
+  const pts = shapePointsCache[name];
+  for (let i = 0; i < 16; i++) {
+    shapeSprings[i].x.target = pts[i][0];
+    shapeSprings[i].y.target = pts[i][1];
+  }
+  updateShapeRow();
+}
+
+// ---------- 渲染循环 ----------
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  // 眼睛参数弹簧
+  const lg = {
+    x: leftSprings.x.step(leftSprings.x.target, dt), y: leftSprings.y.step(leftSprings.y.target, dt),
+    width: leftSprings.w.step(leftSprings.w.target, dt), height: leftSprings.h.step(leftSprings.h.target, dt),
+    rotation: leftSprings.r.step(leftSprings.r.target, dt), curve: leftSprings.c.step(leftSprings.c.target, dt),
+    skew: leftSprings.s.step(leftSprings.s.target, dt),
+  };
+  const rg = {
+    x: rightSprings.x.step(rightSprings.x.target, dt), y: rightSprings.y.step(rightSprings.y.target, dt),
+    width: rightSprings.w.step(rightSprings.w.target, dt), height: rightSprings.h.step(rightSprings.h.target, dt),
+    rotation: rightSprings.r.step(rightSprings.r.target, dt), curve: rightSprings.c.step(rightSprings.c.target, dt),
+    skew: rightSprings.s.step(rightSprings.s.target, dt),
+  };
+
+  // 眼睛跟随鼠标（在自身坐标系内偏移）
+  const ox = eyeOffset.x.step(0, dt), oy = eyeOffset.y.step(0, dt);
+  lg.x += ox; rg.x += ox;
+  lg.y += oy; rg.y += oy;
+
+  // 眼睛特效
+  let effLeft = { dx: 0, dy: 0, scale: 1, rot: 0, eyeScaleY: 1 };
+  let effRight = { dx: 0, dy: 0, scale: 1, rot: 0, eyeScaleY: 1 };
+  if (eyeEffect) {
+    eyeEffect.t += dt * 1000;
+    const p = clamp(eyeEffect.t / eyeEffect.dur, 0, 1);
+    const r = eyeEffect.fn(p);
+    effLeft = { ...effLeft, ...r.left };
+    effRight = { ...effRight, ...r.right };
+    if (p >= 1) eyeEffect = null;
+  }
+  lg.x += effLeft.dx; lg.y += effLeft.dy; lg.rotation += effLeft.rot;
+  rg.x += effRight.dx; rg.y += effRight.dy; rg.rotation += effRight.rot;
+  lg.width *= effLeft.scale; lg.height *= effLeft.scale;
+  rg.width *= effRight.scale; rg.height *= effRight.scale;
+
+  // 眨眼（缩放整组眼睛，原点在脸部中心）
+  const blinkTarget = blinkProgress;
+  // blinkProgress 由定时器驱动，这里做平滑
+  blinkSpring.step(blinkTarget, dt);
+
+  // 生成眼睛路径（实际宽度应用眨眼缩放）
+  const blinkScale = clamp(blinkSpring.x, 0.05, 1);
+  const lgRender = { ...lg, height: lg.height * blinkScale, y: lg.y + lg.height * (1 - blinkScale) * 0.5 };
+  const rgRender = { ...rg, height: rg.height * blinkScale, y: rg.y + rg.height * (1 - blinkScale) * 0.5 };
+  leftEye.setAttribute("d", eyePath(lgRender));
+  rightEye.setAttribute("d", eyePath(rgRender));
+
+  // 身体
+  const bodyY = bodySprings.y.step(bodySprings.y.target, dt);
+  const bodyRot = bodySprings.rotate.step(bodySprings.rotate.target, dt);
+  const bodySX = bodySprings.scaleX.step(bodySprings.scaleX.target, dt);
+  const bodySY = bodySprings.scaleY.step(bodySprings.scaleY.target, dt);
+
+  // 反应动画
+  let rY = 0, rRot = 0, rScale = 1, rSX = 1, rSY = 1;
+  if (reaction) {
+    reaction.t += dt * 1000;
+    const p = clamp(reaction.t / reaction.dur, 0, 1);
+    const frames = reactionFrames[reaction.type];
+    const times = [0, 0.22, 0.58, 0.82, 1];
+    // 分段线性 + ease
+    const evalF = arr => {
+      for (let i = 1; i < times.length; i++) {
+        if (p <= times[i]) {
+          const local = (p - times[i - 1]) / (times[i] - times[i - 1]);
+          return lerp(arr[i - 1], arr[i], easeOutCubic(local));
+        }
+      }
+      return arr[arr.length - 1];
+    };
+    if (frames.y) rY = evalF(frames.y);
+    if (frames.rotate) rRot = evalF(frames.rotate);
+    if (frames.scale) rScale = evalF(frames.scale);
+    if (frames.scaleX) rSX = evalF(frames.scaleX);
+    if (frames.scaleY) rSY = evalF(frames.scaleY);
+    if (p >= 1) reaction = null;
+  }
+
+  // 鼠标 tilt
+  const tiltVal = tilt.step(0, dt);
+
+  // 应用身体变换
+  const totalRot = bodyRot + rRot + tiltVal;
+  const totalSX = bodySX * rSX * rScale;
+  const totalSY = bodySY * rSY * rScale;
+  bodyGroup.setAttribute("transform", `translate(0 ${round(bodyY + rY)}) rotate(${round(totalRot)} 100 100) scale(${round(totalSX,3)} ${round(totalSY,3)})`);
+  glossGroup.setAttribute("transform", `translate(0 ${round(bodyY + rY)}) rotate(${round(totalRot * 0.5)} 100 100) scale(${round(totalSX,3)} ${round(totalSY,3)})`);
+
+  // 形状 morph（16 点插值 + 目标形状张力）
+  const pts = [];
+  for (let i = 0; i < 16; i++) {
+    const x = shapeSprings[i].x.step(shapeSprings[i].x.target, dt);
+    const y = shapeSprings[i].y.step(shapeSprings[i].y.target, dt);
+    pts.push([x, y]);
+  }
+  const tension = shapeTension(currentShapeName);
+  bodyPath.setAttribute("d", createClosedPath(pts, tension));
+  document.getElementById("clipPath").setAttribute("d", bodyPath.getAttribute("d"));
+
+  // 渐变随颜色更新
+  const c = bodyColor;
+  const gradA = document.querySelector("#bodyGrad stop:first-child");
+  const gradB = document.querySelector("#bodyGrad stop:last-child");
+  gradA.setAttribute("stop-color", lighten(c, 0.25));
+  gradB.setAttribute("stop-color", c);
+
+  requestAnimationFrame(tick);
+}
+const blinkSpring = new Spring(1, 300, 20, 0.6);
+
+// ---------- 眨眼定时器 ----------
+function scheduleBlink() {
+  const delay = 2600 + Math.random() * 3600;
+  blinkTimer = setTimeout(() => {
+    // 闭眼 → 睁眼
+    blinkProgress = 0;
+    setTimeout(() => { blinkProgress = 1; scheduleBlink(); }, 150);
+  }, delay);
+}
+
+// ---------- 自动变脸 ----------
+function scheduleAuto() {
+  if (!autoOn) return;
+  const delay = 2400 + Math.random() * 2800;
+  autoTimer = setTimeout(() => {
+    const names = Object.keys(EXPRESSIONS);
+    let next;
+    do { next = names[Math.floor(Math.random() * names.length)]; } while (next === currentExprName);
+    setExpression(next, true);
+    scheduleAuto();
+  }, delay);
+}
+
+// ---------- 交互 ----------
+// 鼠标相对脸中心的位置 → 眼睛偏移 + 身体倾斜
+stage.addEventListener("pointermove", e => {
+  const rect = svg.getBoundingClientRect();
+  const sx = 200 / rect.width;
+  const mx = (e.clientX - rect.left) * sx;
+  const my = (e.clientY - rect.top) * sx;
+  pointer.x = mx; pointer.y = my;
+  const dx = (mx - 100) / 100, dy = (my - 100) / 100;
+  eyeOffset.x.target = clamp(dx * 18 * 1.35, -18, 18);
+  eyeOffset.y.target = clamp(dy * 12 * 1.35, -12, 12);
+  tilt.target = clamp(dx * 3, -3, 3);
+});
+stage.addEventListener("pointerleave", () => {
+  eyeOffset.x.target = 0; eyeOffset.y.target = 0; tilt.target = 0;
+});
+
+// 点击 → 反应
+stage.addEventListener("click", e => {
+  e.preventDefault();
+  const type = REACTIONS[currentExprName] || "bounce";
+  if (type !== "none") reaction = { type, t: 0, dur: 620 };
+  // 顺带快速眨一下眼
+  blinkProgress = 0;
+  setTimeout(() => { blinkProgress = 1; }, 120);
+});
+// 右键 → 切换形状
+stage.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  const idx = SHAPE_NAMES.indexOf(currentShapeName);
+  const next = SHAPE_NAMES[(idx + 1) % SHAPE_NAMES.length];
+  setShape(next);
+});
+
+// ---------- UI 构建 ----------
+const exprRail = document.getElementById("exprRail");
+const shapeRow = document.getElementById("shapeRow");
+
+function updateRail() {
+  [...exprRail.children].forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.name === currentExprName);
+  });
+}
+function updateShapeRow() {
+  [...shapeRow.children].forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.name === currentShapeName);
+  });
+}
+
+Object.entries(EXPRESSIONS).forEach(([name, def]) => {
+  const b = document.createElement("button");
+  b.dataset.name = name;
+  b.textContent = def.label;
+  b.addEventListener("click", () => setExpression(name, true));
+  exprRail.appendChild(b);
+});
+
+SHAPE_NAMES.forEach(name => {
+  const b = document.createElement("button");
+  b.className = "shape-btn";
+  b.dataset.name = name;
+  b.title = SHAPE_LABELS[name];
+  const mini = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  mini.setAttribute("viewBox", "0 0 200 200");
+  const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  p.setAttribute("d", createClosedPath(shapePointsCache[name], shapeTension(name)));
+  p.setAttribute("fill", "#dfff5b");
+  mini.appendChild(p);
+  b.appendChild(mini);
+  b.addEventListener("click", () => setShape(name));
+  shapeRow.appendChild(b);
+});
+
+// 颜色 / 大小 / 自动
+let bodyColor = "#dfff5b";
+function lighten(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, bl = n & 255;
+  r = Math.round(r + (255 - r) * amt); g = Math.round(g + (255 - g) * amt); bl = Math.round(bl + (255 - bl) * amt);
+  return `#${((r << 16) | (g << 8) | bl).toString(16).padStart(6, "0")}`;
+}
+document.getElementById("colorBody").addEventListener("input", e => { bodyColor = e.target.value; });
+document.getElementById("colorEye").addEventListener("input", e => {
+  leftEye.setAttribute("fill", e.target.value);
+  rightEye.setAttribute("fill", e.target.value);
+});
+document.getElementById("sizeRange").addEventListener("input", e => {
+  svg.setAttribute("width", e.target.value);
+  svg.setAttribute("height", e.target.value);
+});
+document.getElementById("autoToggle").addEventListener("change", e => {
+  autoOn = e.target.checked;
+  if (autoOn) scheduleAuto(); else { clearTimeout(autoTimer); }
+});
+
+// ---------- 启动 ----------
+setExpression("neutral", false);
+scheduleBlink();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
