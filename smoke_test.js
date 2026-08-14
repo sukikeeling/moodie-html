@@ -73,7 +73,7 @@ global.setTimeout = (fn) => { if (timerCount++ < 30) fn(); return timerCount; };
 global.clearTimeout = () => {};
 global.setInterval = () => 1;
 global.clearInterval = () => {};
-global.Path2D = class { closePath() {} moveTo() {} lineTo() {} };
+global.Path2D = class { closePath() {} moveTo() {} lineTo() {} bezierCurveTo() {} };
 
 // ---- 运行 ----
 try { eval(src); } catch (e) { console.log('❌ 加载失败:', e.message); process.exit(1); }
@@ -111,13 +111,21 @@ console.log('渲染帧数:', frames, frames === 10 ? '✅' : '❌');
 const eye0 = getEl('eye-0'), eye1 = getEl('eye-1');
 const d0 = eye0.attrs.d || '', d1 = eye1.attrs.d || '';
 console.log('眼睛路径:', d0.length, d1.length, (d0 && d1) ? '✅' : '❌');
+const d0Smooth = d0.includes('C');
+console.log('眼睛平滑曲线 (Catmull-Rom):', d0Smooth ? '✅' : '❌ 仍是直线');
 console.log('NaN 检查:', /NaN|undefined|null/.test(d0 + d1) ? '❌ 有' : '✅ 无');
 console.log('异常:', errors.length ? errors.join(';') : '✅ 无');
 
-// ---- 身体弹簧检查 ----
-const springTf = getEl('spring-group').attrs.transform || '';
-console.log('spring-group transform:', springTf ? '✅ ' + springTf.slice(0, 60) : '❌ 空');
-console.log('transform NaN:', /NaN|undefined/.test(springTf) ? '❌ 有' : '✅ 无');
+// ---- 身体弹簧检查（呼吸浮动 → 多帧 transform 应持续变化） ----
+const tfA = getEl('spring-group').attrs.transform || '';
+for (let i = 0; i < 30 && global.__raf; i++) {
+  global.__now += 16.7;
+  const fnX = global.__raf; global.__raf = null; fnX(global.__now);
+}
+const tfB = getEl('spring-group').attrs.transform || '';
+console.log('spring-group transform:', tfA ? '✅ ' + tfA.slice(0, 60) : '❌ 空');
+console.log('呼吸浮动（30帧后 transform 变化）:', tfA !== tfB ? '✅' : '❌ 静止');
+console.log('transform NaN:', /NaN|undefined/.test(tfA + tfB) ? '❌ 有' : '✅ 无');
 
 // ---- 点击反应检查 ----
 try {

@@ -3104,6 +3104,20 @@ const exprPerPage = 5, statePerPage = 6;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const centroid = ring => ring.reduce((a, p) => [a[0] + p[0] / ring.length, a[1] + p[1] / ring.length], [0, 0]);
 const path = ring => 'M' + ring.map(p => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join('L') + 'Z';
+// Catmull-Rom 平滑闭环路径（第一版的柔软曲线眼睛，替代直线多边形）
+const smoothRing = (ring, tension = 1) => {
+  if (ring.length < 3) return path(ring);
+  const r = v => Math.round(v * 100) / 100;
+  const n = ring.length;
+  let d = `M${r(ring[0][0])},${r(ring[0][1])}`;
+  for (let i = 0; i < n; i++) {
+    const prev = ring[(i - 1 + n) % n], cur = ring[i], next = ring[(i + 1) % n], after = ring[(i + 2) % n];
+    const c1 = [cur[0] + ((next[0] - prev[0]) / 6) * tension, cur[1] + ((next[1] - prev[1]) / 6) * tension];
+    const c2 = [next[0] - ((after[0] - cur[0]) / 6) * tension, next[1] - ((after[1] - cur[1]) / 6) * tension];
+    d += `C${r(c1[0])},${r(c1[1])} ${r(c2[0])},${r(c2[1])} ${r(next[0])},${r(next[1])}`;
+  }
+  return d + 'Z';
+};
 
 /* ===== 第一版表现力系统：弹簧身体 + 姿态 + 点击反应 ===== */
 class Spring {
@@ -3131,7 +3145,8 @@ const PERF_PALETTE = [
   { y: -6, scaleX: 0.94, scaleY: 1.12 },                     // 警觉绷紧
   { scaleX: 1.06, scaleY: 1.06, rotate: -2 },                // 膨胀
 ];
-const bodySprings = { y: new Spring(0, 240, 22), rotate: new Spring(0, 240, 22), scaleX: new Spring(1, 240, 22), scaleY: new Spring(1, 240, 22) };
+const bodySprings = { y: new Spring(0, 170, 15), rotate: new Spring(0, 170, 15), scaleX: new Spring(1, 170, 15), scaleY: new Spring(1, 170, 15) };
+const bodyTilt = new Spring(0, 120, 18);
 const springGroup = document.querySelector('#spring-group');
 let reaction = null;  // { type, t, dur }
 const REACTION_FRAMES = {
@@ -3165,6 +3180,11 @@ function chooseExpression(index) {
   bodySprings.rotate.target = perf.rotate ?? 0;
   bodySprings.scaleX.target = perf.scaleX ?? 1;
   bodySprings.scaleY.target = perf.scaleY ?? 1;
+  // 切换冲击：给弹簧一个初速度 → 身体"甩"过去再回弹（anticipation 感）
+  bodySprings.y.v = (perf.y ?? 0) * 0.22;
+  bodySprings.rotate.v = (perf.rotate ?? 0) * 0.18;
+  bodySprings.scaleX.v = ((perf.scaleX ?? 1) - 1) * 0.25;
+  bodySprings.scaleY.v = ((perf.scaleY ?? 1) - 1) * 0.25;
   // 切换时快速眨眼 + 眼睛脉冲
   eyePulse = 1;
   blink();
@@ -3180,7 +3200,8 @@ function blink() { blinkStart = performance.now(); }
 function frame(now) {
   const dt = Math.min((now - last) / 1000, .1);
   last = now;
-  velocity += (-14 * velocity - 49 * (morph - 1)) * dt;
+  // 眼睛 morph 弹簧（调软 → 切换时有回弹）
+  velocity += (-10 * velocity - 36 * (morph - 1)) * dt;
   morph += velocity * dt;
   if (!Number.isFinite(morph)) { morph = 1; velocity = 0; }
   const shown = rings(), bs = blinkScale(now), rad = turn * Math.PI / 180;
@@ -3195,16 +3216,24 @@ function frame(now) {
       perspective = Math.max(depth, .02) / Math.max(Math.cos(base), .02),
       x = 114.2705 + 105 * Math.sin(longitude) + gazeX,
       y = c[1] + gazeY;
-    eyeEls[i].setAttribute('d', path(ring));
+    eyeEls[i].setAttribute('d', smoothRing(ring));
     eyeEls[i].setAttribute('transform', `translate(${x} ${y}) scale(${clamp(perspective, .02, 2.4) * pulseScale} ${bs}) translate(${-c[0]} ${-c[1]})`);
     eyeEls[i].style.opacity = depth > .02 ? '1' : '0';
   });
 
-  // 身体弹簧姿态
+  // 身体弹簧姿态（更软的参数 → Q 弹）
   const bodyY = bodySprings.y.step(bodySprings.y.target, dt);
   const bodyRot = bodySprings.rotate.step(bodySprings.rotate.target, dt);
   const bodySX = bodySprings.scaleX.step(bodySprings.scaleX.target, dt);
   const bodySY = bodySprings.scaleY.step(bodySprings.scaleY.target, dt);
+
+  // 呼吸浮动（永远在动 → 生命感）
+  const t = now / 1000;
+  const breathY = Math.sin(t * 2.1) * 1.4;
+  const breathRot = Math.sin(t * 1.7) * 0.6;
+  const breathScale = 1 + Math.sin(t * 2.6) * 0.008;
+  // 鼠标 hover 身体微倾
+  const tiltVal = bodyTilt.step(bodyTilt.target ?? 0, dt);
 
   // 点击反应叠加
   let rY = 0, rRot = 0, rScale = 1, rSX = 1, rSY = 1;
@@ -3229,8 +3258,13 @@ function frame(now) {
     if (p >= 1) reaction = null;
   }
 
+  const finalY = bodyY + rY + breathY;
+  const finalRot = bodyRot + rRot + breathRot + tiltVal;
+  const finalSX = bodySX * rSX * rScale * breathScale;
+  const finalSY = bodySY * rSY * rScale * (2 - breathScale);  // 体积守恒
+
   springGroup.setAttribute('transform',
-    `translate(0 ${(bodyY + rY).toFixed(2)}) rotate(${(bodyRot + rRot).toFixed(2)} 114 114) scale(${(bodySX * rSX * rScale).toFixed(3)} ${(bodySY * rSY * rScale).toFixed(3)})`);
+    `translate(0 ${finalY.toFixed(2)}) rotate(${finalRot.toFixed(2)} 114 114) scale(${finalSX.toFixed(3)} ${finalSY.toFixed(3)})`);
 
   requestAnimationFrame(frame);
 }
@@ -3243,7 +3277,7 @@ function renderExpressions() {
     const index = start + offset, button = document.createElement('button');
     button.type = 'button'; button.dataset.index = index;
     button.setAttribute('aria-pressed', String(index === expression));
-    button.innerHTML = `<svg viewBox="0 0 229 229" aria-hidden="true"><path d="${path(DATA.EXPRESSIONS[index][0])}"/><path d="${path(DATA.EXPRESSIONS[index][1])}"/></svg><span>表情 ${String(index).padStart(2, '0')}</span>`;
+    button.innerHTML = `<svg viewBox="0 0 229 229" aria-hidden="true"><path d="${smoothRing(DATA.EXPRESSIONS[index][0])}"/><path d="${smoothRing(DATA.EXPRESSIONS[index][1])}"/></svg><span>表情 ${String(index).padStart(2, '0')}</span>`;
     root.appendChild(button);
   });
   document.querySelector('#expression-count').textContent = `${DATA.EXPRESSIONS.length} 种 · ${exprPage + 1}/${Math.ceil(DATA.EXPRESSIONS.length / exprPerPage)} 页`;
@@ -3431,6 +3465,20 @@ function ringPath(points) {
   points.forEach((point, index) => index ? result.lineTo(point[0], point[1]) : result.moveTo(point[0], point[1]));
   result.closePath(); return result;
 }
+// Canvas 版 Catmull-Rom 平滑路径（分享卡眼睛与屏幕一致）
+function smoothPath2D(points) {
+  const p = new Path2D();
+  const n = points.length;
+  p.moveTo(points[0][0], points[0][1]);
+  for (let i = 0; i < n; i++) {
+    const prev = points[(i - 1 + n) % n], cur = points[i], next = points[(i + 1) % n], after = points[(i + 2) % n];
+    const c1 = [cur[0] + (next[0] - prev[0]) / 6, cur[1] + (next[1] - prev[1]) / 6];
+    const c2 = [next[0] - (after[0] - cur[0]) / 6, next[1] - (after[1] - cur[1]) / 6];
+    p.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], next[0], next[1]);
+  }
+  p.closePath();
+  return p;
+}
 function grid(ctx) {
   ctx.save(); ctx.strokeStyle = '#dedbd2'; ctx.lineWidth = 2; ctx.globalAlpha = .72;
   for (let x = 72; x <= 1008; x += 72) { ctx.beginPath(); ctx.moveTo(x, 250); ctx.lineTo(x, 1090); ctx.stroke(); }
@@ -3504,7 +3552,7 @@ function renderShareCard(snapshot) {
   ctx.fillStyle = accent; ctx.fill(new Path2D(bodyShape));
   ctx.shadowColor = 'transparent';
   ctx.save(); ctx.clip(new Path2D(bodyShape)); ctx.fillStyle = '#fffdf7';
-  snapshot.rings.forEach(points => ctx.fill(ringPath(points))); ctx.restore();
+  snapshot.rings.forEach(points => ctx.fill(smoothPath2D(points))); ctx.restore();
   drawAccessories(ctx, snapshot, 'front');
   ctx.restore();
   rounded(ctx, 112, 968, 856, 82, 22); ctx.fillStyle = 'rgba(255,253,247,.96)'; ctx.fill(); ctx.strokeStyle = '#d8d4c8'; ctx.lineWidth = 2; ctx.stroke();
@@ -3540,10 +3588,13 @@ document.querySelector('#state-next').addEventListener('click', () => {
 });
 viewer.addEventListener('pointermove', e => {
   const box = viewer.getBoundingClientRect();
-  gazeX = clamp((e.clientX - box.left) / box.width * 2 - 1, -.6, .6) * 22;
-  gazeY = clamp((e.clientY - box.top) / box.height * 2 - 1, -.6, .6) * 14;
+  const dx = clamp((e.clientX - box.left) / box.width * 2 - 1, -.6, .6);
+  const dy = clamp((e.clientY - box.top) / box.height * 2 - 1, -.6, .6);
+  gazeX = dx * 22;
+  gazeY = dy * 14;
+  bodyTilt.target = clamp(dx * 4, -4, 4);  // 身体跟随鼠标微倾
 });
-viewer.addEventListener('pointerleave', () => { gazeX = 0; gazeY = 0; });
+viewer.addEventListener('pointerleave', () => { gazeX = 0; gazeY = 0; bodyTilt.target = 0; });
 viewer.addEventListener('pointerdown', () => blink());
 viewer.addEventListener('click', () => {
   const type = STATE_REACTION[activeState] || 'bounce';
