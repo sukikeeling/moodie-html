@@ -186,20 +186,25 @@ try {
   console.log('持续状态动作测试异常:', e.message);
 }
 
-// ---- 卡片堆叠交互检查 ----
+// ---- 卡片堆叠交互检查（循环切换：双击应轮完所有 4 张卡） ----
 try {
-  const c0 = stackCards[0], c1 = stackCards[1];
-  console.log('堆叠初始: 卡0 top =', c0.classList.has('top') ? '✅' : '❌', '卡1 back-1 =', c1.classList.has('back-1') ? '✅' : '❌');
-  // 双击卡0头部 → 切到卡1
-  const head0 = c0.querySelector('.card-head');
-  head0.listeners.dblclick && head0.listeners.dblclick();
+  const tops = [];
+  for (let round = 0; round < 4; round++) {
+    // 找当前 top 卡并双击它的头部
+    let topIdx = 0;
+    for (let i = 0; i < 4; i++) if (stackCards[i].classList.has('pos-0')) topIdx = i;
+    tops.push(topIdx);
+    const head = stackCards[topIdx].querySelector('.card-head');
+    head.listeners.dblclick && head.listeners.dblclick();
+    global.__flushTimers && global.__flushTimers();
+  }
+  const allSeen = new Set(tops);
+  console.log('循环切换顺序:', tops.join('→'), allSeen.size === 4 ? '✅ 4张卡都能切到' : '❌ 只能切到 ' + [...allSeen].join(','));
+  // 单击卡3（当前非顶层）→ 提到最前
+  const head3 = stackCards[3].querySelector('.card-head');
+  head3.listeners.pointerdown && head3.listeners.pointerdown({ clientX: 0, clientY: 0, pointerId: 1 });
   global.__flushTimers && global.__flushTimers();
-  console.log('双击切换: 卡1 top =', c1.classList.has('top') ? '✅' : '❌', '卡0 back-1 =', c0.classList.has('back-1') ? '✅' : '❌');
-  // 单击卡2（非顶层）头部 → 丝滑展开到前面
-  const head2 = stackCards[2].querySelector('.card-head');
-  head2.listeners.pointerdown && head2.listeners.pointerdown({ clientX: 0, clientY: 0, pointerId: 1 });
-  global.__flushTimers && global.__flushTimers();
-  console.log('点击展开: 卡2 top =', stackCards[2].classList.has('top') ? '✅' : '❌');
+  console.log('单击提到最前: 卡3 pos-0 =', stackCards[3].classList.has('pos-0') ? '✅' : '❌');
 } catch (e) {
   console.log('卡片堆叠测试异常:', e.message);
 }
