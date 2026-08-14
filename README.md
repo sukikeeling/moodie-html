@@ -87,6 +87,29 @@ build.py         # 构建脚本（把 original-data.js 数据内嵌进模板）
 smoke_test.js    # 冒烟测试（Node 可跑，验证数据/动画/堆叠/分享卡）
 ```
 
+## 🔧 开发与重建（README 没写会踩的坑）
+
+### 直接使用（零构建）
+仓库里提交的 `moodie.html` / `moodie-v1.html` 都是**完整可独立运行的单文件**，双击打开即玩，不需要任何构建步骤。
+
+### 跑冒烟测试（先 extract，再 smoke）
+`smoke_test.js` 运行时读取 `_check.js`，而 `_check.js` 是**本地临时产物、不入库**，由 `extract.py` 从 `moodie.html` 提取生成。clone 后直接跑 `node smoke_test.js` 会报"找不到 _check.js"——**不是测试坏了**，按顺序跑：
+
+```powershell
+python extract.py            # 从 moodie.html 提取全部 <script> 合并生成 _check.js（临时文件）
+node --check _check.js       # 语法检查（可选）
+node smoke_test.js           # 冒烟测试：25 表情 / 39 状态 / 持续动作 / 卡片堆叠 / 分享卡
+```
+
+### 从零重建 moodie.html（需要上游数据文件）
+`build.py` 把 `original-data.js` 内嵌进 `_template.html` 生成 `moodie.html`。数据文件来自上游 [zhulin025/LaoA-GrokBot](https://github.com/zhulin025/LaoA-GrokBot) 仓库，脚本里硬编码的是作者本机路径：
+
+```python
+DATA_SRC = r'D:\temp\LaoA-GrokBot\original-data.js'
+```
+
+clone 上游仓库后，把 `DATA_SRC` 改成你的路径再 `python build.py`。**已提交的 `moodie.html` 无需重建**——只有改了 `_template.html` 逻辑需要重新生成时才需要这一步。
+
 ## 🎭 双版本说明
 
 | | **经典版 moodie-v1.html** | **融合版 moodie.html** |
