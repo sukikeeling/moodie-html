@@ -114,6 +114,30 @@ console.log('眼睛路径:', d0.length, d1.length, (d0 && d1) ? '✅' : '❌');
 console.log('NaN 检查:', /NaN|undefined|null/.test(d0 + d1) ? '❌ 有' : '✅ 无');
 console.log('异常:', errors.length ? errors.join(';') : '✅ 无');
 
+// ---- 身体弹簧检查 ----
+const springTf = getEl('spring-group').attrs.transform || '';
+console.log('spring-group transform:', springTf ? '✅ ' + springTf.slice(0, 60) : '❌ 空');
+console.log('transform NaN:', /NaN|undefined/.test(springTf) ? '❌ 有' : '✅ 无');
+
+// ---- 点击反应检查 ----
+try {
+  const viewerEl = getEl('viewer');
+  viewerEl.listeners.click && viewerEl.listeners.click();
+  // 再跑几帧让反应动画执行
+  let rFrames = 0;
+  global.__now += 16.7;
+  while (rFrames < 40 && global.__raf) {
+    global.__now += 16.7;
+    const fn = global.__raf; global.__raf = null;
+    try { fn(global.__now); rFrames++; } catch (e) { errors.push(`react frame: ${e.message}`); break; }
+  }
+  const tf2 = getEl('spring-group').attrs.transform || '';
+  console.log('点击后反应动画帧数:', rFrames, 'transform:', tf2 ? '✅' : '❌');
+  console.log('反应 NaN:', /NaN|undefined/.test(tf2) ? '❌ 有' : '✅ 无');
+} catch (e) {
+  console.log('点击反应测试异常:', e.message);
+}
+
 // ---- 分享卡渲染测试 ----
 try {
   const createWork = getEl('create-work');

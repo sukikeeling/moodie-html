@@ -253,6 +253,7 @@
           <clipPath id="head-clip"><path id="shape-clip-path" d="M228.541 114.228C228.541 130.133 225.184 145.994 218.738 160.534C212.674 174.217 203.904 186.669 193.065 196.988C155.933 232.34 99.497 238.596 55.5255 212.24C45.097 205.99 35.6851 198.072 27.7451 188.866C19.1926 178.953 12.3686 167.569 7.65781 155.351C2.60712 142.264 0 128.257 0 114.228C0 98.3219 3.35751 82.4611 9.80315 67.9215C15.8672 54.2382 24.6377 41.7862 35.4767 31.4668C72.6081 -3.88483 129.044 -10.1413 173.016 16.2153C183.444 22.4653 192.856 30.3829 200.796 39.5896C209.349 49.5018 216.173 60.8859 220.883 73.1037C225.934 86.1906 228.541 100.198 228.541 114.228Z"/></clipPath>
         </defs>
         <ellipse class="orbit" cx="114" cy="115" rx="107" ry="38"/>
+        <g id="spring-group">
         <g class="accessory back-accessory" id="accessory-cape"><path d="M25 79Q-2 119 13 210Q65 192 90 168Z"/><path d="M204 79Q231 119 216 210Q164 192 139 168Z"/></g>
         <g class="body-part" id="part-antenna"><path d="M114 18V-5"/><circle cx="114" cy="-12" r="8"/></g>
         <g class="body-part" id="part-tail"><path d="M205 154C246 151 254 181 230 198C216 208 214 220 227 228"/></g>
@@ -263,6 +264,7 @@
         <g class="accessory front-accessory" id="accessory-straw-hat"><path d="M63 28Q72-24 114-28Q156-24 165 28Z"/><ellipse cx="114" cy="31" rx="91" ry="18"/><path class="hat-band" d="M64 10Q114 22 164 10L166 27Q114 38 62 27Z"/></g>
         <g class="accessory front-accessory" id="accessory-glasses"><circle cx="72" cy="108" r="37"/><circle cx="157" cy="108" r="37"/><path d="M109 106Q114 99 120 106M35 102L12 94M194 102L217 94"/></g>
         <g class="accessory front-accessory" id="accessory-bowtie"><path d="M114 172L78 151Q62 143 64 176Q65 205 82 194L114 178Z"/><path d="M114 172L150 151Q166 143 164 176Q163 205 146 194L114 178Z"/><circle cx="114" cy="175" r="12"/></g>
+        </g>
       </svg>
     </div>
     <div class="status"><span>当前状态</span><strong id="status">表情 00 · idle</strong></div>
@@ -381,6 +383,53 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const centroid = ring => ring.reduce((a, p) => [a[0] + p[0] / ring.length, a[1] + p[1] / ring.length], [0, 0]);
 const path = ring => 'M' + ring.map(p => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join('L') + 'Z';
 
+/* ===== 第一版表现力系统：弹簧身体 + 姿态 + 点击反应 ===== */
+class Spring {
+  constructor(value, stiffness = 210, damping = 22, mass = 0.8) {
+    this.x = value; this.v = 0;
+    this.stiffness = stiffness; this.damping = damping; this.mass = mass;
+  }
+  step(target, dt) {
+    const a = (-this.stiffness * (this.x - target) - this.damping * this.v) / this.mass;
+    this.v += a * dt;
+    this.x += this.v * dt;
+    return this.x;
+  }
+}
+// 每个表情的"姿态"（编号取模分配，切换时弹簧过渡 → 身体一直有生命感）
+const PERF_PALETTE = [
+  { y: -2, scaleY: 0.92 },                                   // 轻盈
+  { y: -5, rotate: 2, scaleX: 1.08, scaleY: 1.12 },          // 兴奋上扬
+  { y: 3, scaleX: 0.97, scaleY: 1.03 },                      // 下沉
+  { rotate: 4, scaleX: 1.04 },                               // 右倾
+  { rotate: -5, y: 1 },                                      // 左倾
+  { scaleX: 1.03, scaleY: 0.97, y: -1 },                     // 横向拉伸
+  { y: 4, rotate: -3, scaleX: 0.98, scaleY: 1.02 },          // 慵懒
+  { rotate: 6, scaleY: 0.94, y: -3 },                        // 歪头
+  { y: -6, scaleX: 0.94, scaleY: 1.12 },                     // 警觉绷紧
+  { scaleX: 1.06, scaleY: 1.06, rotate: -2 },                // 膨胀
+];
+const bodySprings = { y: new Spring(0, 240, 22), rotate: new Spring(0, 240, 22), scaleX: new Spring(1, 240, 22), scaleY: new Spring(1, 240, 22) };
+const springGroup = document.querySelector('#spring-group');
+let reaction = null;  // { type, t, dur }
+const REACTION_FRAMES = {
+  bounce: { y: [0, -11, 3.5, -1, 0], rotate: [0, -2.5, 2, -0.7, 0], scale: [1, 0.96, 1.025, 0.99, 1] },
+  squash: { scaleX: [1, 1.045, 0.978, 1.012, 1], scaleY: [1, 0.95, 1.028, 0.992, 1], y: [0, 5, -3, 1, 0] },
+  tilt:   { rotate: [0, -8, 6, -2, 0], y: [0, 3, -2, 0.5, 0] },
+  spin:   { rotate: [0, 14, -12, 7, 0], scale: [1, 0.93, 1.045, 0.985, 1] },
+};
+const REACTION_TIMES = [0, 0.22, 0.58, 0.82, 1];
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+// 状态 → 点击反应类型
+const STATE_REACTION = {
+  excited: 'bounce', happy: 'bounce', laughing: 'bounce', playful: 'bounce', celebrate: 'bounce', bouncing: 'bounce',
+  sad: 'squash', angry: 'squash', suspicious: 'squash', focused: 'squash', drowsy: 'squash',
+  listening: 'tilt', thinking: 'tilt', curious: 'tilt', confused: 'tilt', shy: 'tilt', dragging: 'tilt', bored: 'tilt', proud: 'tilt',
+  dizzy: 'spin', orbit: 'spin', radar: 'spin', progress: 'spin',
+};
+// 表情切换时的眼睛脉冲（缩放特效）
+let eyePulse = 0; // 0→1 衰减
+
 function rings() {
   return current.map((ring, e) => ring.map((p, i) => [p[0] + (target[e][i][0] - p[0]) * clamp(morph, 0, 1), p[1] + (target[e][i][1] - p[1]) * clamp(morph, 0, 1)]));
 }
@@ -388,6 +437,15 @@ function chooseExpression(index) {
   current = rings(); target = DATA.EXPRESSIONS[index]; expression = index; morph = 0; velocity = 0;
   exprPage = Math.floor(index / exprPerPage); renderExpressions();
   status.textContent = `表情 ${String(index).padStart(2, '0')} · ${stateNames[activeState] || activeState}`;
+  // 身体姿态（弹簧过渡 → 灵动）
+  const perf = PERF_PALETTE[index % PERF_PALETTE.length];
+  bodySprings.y.target = perf.y ?? 0;
+  bodySprings.rotate.target = perf.rotate ?? 0;
+  bodySprings.scaleX.target = perf.scaleX ?? 1;
+  bodySprings.scaleY.target = perf.scaleY ?? 1;
+  // 切换时快速眨眼 + 眼睛脉冲
+  eyePulse = 1;
+  blink();
 }
 function blinkScale(now) {
   if (!blinkStart) return 1;
@@ -404,6 +462,9 @@ function frame(now) {
   morph += velocity * dt;
   if (!Number.isFinite(morph)) { morph = 1; velocity = 0; }
   const shown = rings(), bs = blinkScale(now), rad = turn * Math.PI / 180;
+  // 眼睛脉冲衰减
+  eyePulse = Math.max(0, eyePulse - dt * 3.2);
+  const pulseScale = 1 + Math.sin(eyePulse * Math.PI) * 0.14;
   shown.forEach((ring, i) => {
     const c = centroid(ring),
       base = Math.asin(clamp((c[0] - 114.2705) / 105, -1, 1)),
@@ -413,9 +474,42 @@ function frame(now) {
       x = 114.2705 + 105 * Math.sin(longitude) + gazeX,
       y = c[1] + gazeY;
     eyeEls[i].setAttribute('d', path(ring));
-    eyeEls[i].setAttribute('transform', `translate(${x} ${y}) scale(${clamp(perspective, .02, 2.4)} ${bs}) translate(${-c[0]} ${-c[1]})`);
+    eyeEls[i].setAttribute('transform', `translate(${x} ${y}) scale(${clamp(perspective, .02, 2.4) * pulseScale} ${bs}) translate(${-c[0]} ${-c[1]})`);
     eyeEls[i].style.opacity = depth > .02 ? '1' : '0';
   });
+
+  // 身体弹簧姿态
+  const bodyY = bodySprings.y.step(bodySprings.y.target, dt);
+  const bodyRot = bodySprings.rotate.step(bodySprings.rotate.target, dt);
+  const bodySX = bodySprings.scaleX.step(bodySprings.scaleX.target, dt);
+  const bodySY = bodySprings.scaleY.step(bodySprings.scaleY.target, dt);
+
+  // 点击反应叠加
+  let rY = 0, rRot = 0, rScale = 1, rSX = 1, rSY = 1;
+  if (reaction) {
+    reaction.t += dt * 1000;
+    const p = clamp(reaction.t / reaction.dur, 0, 1);
+    const frames = REACTION_FRAMES[reaction.type];
+    const evalF = arr => {
+      for (let i = 1; i < REACTION_TIMES.length; i++) {
+        if (p <= REACTION_TIMES[i]) {
+          const local = (p - REACTION_TIMES[i - 1]) / (REACTION_TIMES[i] - REACTION_TIMES[i - 1]);
+          return arr[i - 1] + (arr[i] - arr[i - 1]) * easeOutCubic(local);
+        }
+      }
+      return arr[arr.length - 1];
+    };
+    if (frames.y) rY = evalF(frames.y);
+    if (frames.rotate) rRot = evalF(frames.rotate);
+    if (frames.scale) rScale = evalF(frames.scale);
+    if (frames.scaleX) rSX = evalF(frames.scaleX);
+    if (frames.scaleY) rSY = evalF(frames.scaleY);
+    if (p >= 1) reaction = null;
+  }
+
+  springGroup.setAttribute('transform',
+    `translate(0 ${(bodyY + rY).toFixed(2)}) rotate(${(bodyRot + rRot).toFixed(2)} 114 114) scale(${(bodySX * rSX * rScale).toFixed(3)} ${(bodySY * rSY * rScale).toFixed(3)})`);
+
   requestAnimationFrame(frame);
 }
 
@@ -729,6 +823,11 @@ viewer.addEventListener('pointermove', e => {
 });
 viewer.addEventListener('pointerleave', () => { gazeX = 0; gazeY = 0; });
 viewer.addEventListener('pointerdown', () => blink());
+viewer.addEventListener('click', () => {
+  const type = STATE_REACTION[activeState] || 'bounce';
+  reaction = { type, t: 0, dur: 620 };
+  eyePulse = 1;
+});
 document.querySelector('#randomize').addEventListener('click', randomizeAll);
 autoBtn.addEventListener('click', () => {
   const active = autoBtn.getAttribute('aria-pressed') !== 'true';
@@ -747,9 +846,15 @@ document.querySelector('#quick-actions').addEventListener('click', event => {
   const button = event.target.closest('[data-quick-action]');
   if (button) playQuickAction(button.dataset.quickAction);
 });
-setInterval(() => {
-  if (autoBtn.getAttribute('aria-pressed') !== 'true' && DATA.BLINK[activeState]) blink();
-}, 4600);
+// 灵动的随机眨眼（2.2~5.2s，比 LaoA 的固定 4.6s 更有生命感）
+let blinkTimer = 0;
+function scheduleBlink() {
+  blinkTimer = setTimeout(() => {
+    if (autoBtn.getAttribute('aria-pressed') !== 'true' && DATA.BLINK[activeState]) blink();
+    scheduleBlink();
+  }, 2200 + Math.random() * 3000);
+}
+scheduleBlink();
 
 /* ===== 分享 ===== */
 const shareSheet = document.querySelector('#share-sheet'), toast = document.querySelector('#toast');
@@ -785,6 +890,7 @@ document.querySelector('#share-social').addEventListener('click', () => {
 renderExpressions(); renderCategories(); renderStates();
 applyColor(selectedColor); applyShape(selectedShape);
 updateSummaries();
+chooseExpression(0);  // 设置初始身体姿态目标
 requestAnimationFrame(frame);
 </script>
 </body>
