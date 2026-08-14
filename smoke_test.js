@@ -5,6 +5,7 @@ const src = fs.readFileSync('_check.js', 'utf-8');
 // ---- DOM stub ----
 function makeEl(id) {
   const attrs = {};
+  const cls = new Set();
   const el = {
     id, attrs, children: [], listeners: {}, style: { setProperty() {} }, dataset: {},
     setAttribute(k, v) { attrs[k] = String(v); },
@@ -15,7 +16,11 @@ function makeEl(id) {
     set innerHTML(v) { this._html = v; },
     get innerHTML() { return this._html || ''; },
     getBoundingClientRect() { return { left: 0, top: 0, width: 300, height: 300 }; },
-    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    classList: {
+      add: c => cls.add(c), remove: c => cls.delete(c),
+      toggle: (c, f) => { if (f === undefined ? !cls.has(c) : f) cls.add(c); else cls.delete(c); },
+      contains: c => cls.has(c), has: c => cls.has(c), toSet: () => new Set(cls),
+    },
     closest() { return null; },
     offsetWidth: 100,
     querySelectorAll() { return []; },
@@ -41,6 +46,14 @@ function ctxStub() {
 const stageEl = getEl('viewer');
 const svgEl = getEl('bot');
 const canvasEl = { getContext: () => ctxStub(), toDataURL: () => 'data:image/png;base64,test', width: 1080, height: 1440 };
+// 4 张堆叠卡 + 3 个风格按钮
+const stackCards = Array.from({ length: 4 }, (_, i) => {
+  const c = makeEl('stack-card-' + i);
+  const head = makeEl('head-' + i);
+  c.querySelector = (sel) => sel === '.card-head' ? head : null;
+  return c;
+});
+const styleBtns = Array.from({ length: 3 }, (_, i) => makeEl('style-' + i));
 
 global.document = {
   getElementById(id) {
@@ -59,7 +72,11 @@ global.document = {
     if (sel === '#bot') return svgEl;
     return getEl(sel.replace(/[#.]/g, ''));
   },
-  querySelectorAll() { return []; },
+  querySelectorAll(sel) {
+    if (sel === '.stack-card') return stackCards;
+    if (sel === '.stack-styles button') return styleBtns;
+    return [];
+  },
   documentElement: { style: { setProperty() {} } },
   body: makeEl('body'),
 };
@@ -68,11 +85,13 @@ global.requestAnimationFrame = (fn) => { global.__raf = fn; return 1; };
 global.performance = { now: () => global.__now || 0 };
 global.navigator = {};
 global.localStorage = { getItem: () => null, setItem: () => {} };
-let timerCount = 0;
-global.setTimeout = (fn) => { if (timerCount++ < 30) fn(); return timerCount; };
+// 队列式 setTimeout：手动 flush，避免递归烧计数
+let timers = [];
+global.setTimeout = (fn) => { timers.push({ fn }); return timers.length; };
 global.clearTimeout = () => {};
 global.setInterval = () => 1;
 global.clearInterval = () => {};
+global.__flushTimers = () => { const t = timers.splice(0); t.forEach(x => { try { x.fn(); } catch (e) {} }); };
 global.Path2D = class { closePath() {} moveTo() {} lineTo() {} bezierCurveTo() {} };
 
 // ---- 运行 ----
@@ -167,6 +186,24 @@ try {
   console.log('持续状态动作测试异常:', e.message);
 }
 
+// ---- 卡片堆叠交互检查 ----
+try {
+  const c0 = stackCards[0], c1 = stackCards[1];
+  console.log('堆叠初始: 卡0 top =', c0.classList.has('top') ? '✅' : '❌', '卡1 back-1 =', c1.classList.has('back-1') ? '✅' : '❌');
+  // 双击卡0头部 → 切到卡1
+  const head0 = c0.querySelector('.card-head');
+  head0.listeners.dblclick && head0.listeners.dblclick();
+  global.__flushTimers && global.__flushTimers();
+  console.log('双击切换: 卡1 top =', c1.classList.has('top') ? '✅' : '❌', '卡0 back-1 =', c0.classList.has('back-1') ? '✅' : '❌');
+  // 单击卡2（非顶层）头部 → 丝滑展开到前面
+  const head2 = stackCards[2].querySelector('.card-head');
+  head2.listeners.pointerdown && head2.listeners.pointerdown({ clientX: 0, clientY: 0, pointerId: 1 });
+  global.__flushTimers && global.__flushTimers();
+  console.log('点击展开: 卡2 top =', stackCards[2].classList.has('top') ? '✅' : '❌');
+} catch (e) {
+  console.log('卡片堆叠测试异常:', e.message);
+}
+
 // ---- 分享卡渲染测试 ----
 try {
   const createWork = getEl('create-work');
@@ -182,3 +219,4 @@ if (DATA.EXPRESSIONS.length !== 25 || states.length !== 39 || frames !== 10 || e
   process.exit(1);
 }
 console.log('🎉 融合版冒烟测试 PASS');
+
