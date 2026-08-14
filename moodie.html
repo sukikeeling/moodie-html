@@ -224,9 +224,7 @@
     .viewer { height: 370px; }
     .expressions span { font-size: 9px; }
   }
-  @media(prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
-  }
+  /* 注意：不设 prefers-reduced-motion 全局禁用 —— 状态动作是用户主动触发的核心体验 */
 </style>
 </head>
 <body>
@@ -3166,6 +3164,51 @@ const STATE_REACTION = {
 };
 // 表情切换时的眼睛脉冲（缩放特效）
 let eyePulse = 0; // 0→1 衰减
+// 25 个表情的配套一次性动作（编号循环：倾斜/弹跳/压扁/旋转/无）
+const EXPR_ACTIONS = ['tilt', 'bounce', 'squash', 'spin', 'none'];
+// 39 状态持续循环动作（不只是切换时一次，而是该状态下一直动）
+// 参数: y/rot = [幅度, 频率], sx/sy = 缩放幅度, eyeX/eyeY = 眼睛扫描幅度, spin = 持续旋转
+const STATE_LOOP = {
+  sleeping:     { y: [3, 1.2] },
+  waking:       { y: [2, 2.4], rot: [1, 2.2] },
+  idle:         { y: [1, 1.8] },
+  listening:    { eyeX: [4, 2.2], rot: [1.5, 1.6] },
+  thinking:     { rot: [3, 1.4], y: [1.5, 2.0] },
+  searching:    { eyeX: [10, 1.6], rot: [2, 1.8] },
+  working:      { y: [2, 4.5], rot: [1, 4] },
+  excited:      { y: [6, 3.2], sx: [0.03, 3.2], sy: [0.03, 3.2] },
+  surprised:    { sx: [0.04, 4], sy: [0.04, 4] },
+  suspicious:   { rot: [4, 1.2], eyeX: [3, 1.2] },
+  angry:        { y: [2, 3], rot: [3, 3] },
+  drowsy:       { y: [3, 1.1], rot: [2, 0.9] },
+  happy:        { y: [4, 2.8], rot: [2, 2.8] },
+  curious:      { eyeX: [6, 1.5], rot: [2, 1.5] },
+  confused:     { rot: [5, 1.3], eyeX: [4, 2.6] },
+  bored:        { y: [2, 1.0], rot: [1, 0.8] },
+  proud:        { y: [2, 2.2], rot: [-2, 2.2] },
+  shy:          { y: [2, 2.5], rot: [3, 2.5], sx: [0.02, 2.5] },
+  sad:          { y: [2, 1.3], rot: [1, 1.3] },
+  laughing:     { y: [7, 4.2], sx: [0.04, 4.2] },
+  scared:       { y: [3, 5], sx: [0.03, 5] },
+  playful:      { rot: [5, 2.2], y: [3, 2.2] },
+  celebrate:    { y: [8, 3.6], rot: [4, 3.6], spin: true },
+  orbit:        { spin: true, y: [2, 2] },
+  radar:        { eyeX: [12, 1.2], eyeY: [8, 1.2] },
+  progress:     { eyeX: [10, 1.8] },
+  spawning:     { sx: [0.06, 3], sy: [0.06, 3] },
+  humming:      { y: [2, 2.6] },
+  loading:      { eyeY: [6, 1.5], y: [3, 1.5] },
+  dictating:    { rot: [2, 2.8], y: [1.5, 2.8] },
+  writing:      { y: [1.5, 3.2], rot: [1, 3.2] },
+  sending:      { eyeX: [8, 1.8], y: [2, 1.8] },
+  receiving:    { eyeX: [-8, 1.8], y: [2, 1.8] },
+  uploading:    { y: [3, 2.4], eyeY: [4, 2.4] },
+  notifying:    { y: [4, 3.4], rot: [2, 3.4] },
+  alerting:     { y: [3, 4.5], sx: [0.03, 4.5] },
+  dragging:     { eyeX: [6, 1.4], y: [2, 1.4] },
+  bouncing:     { y: [10, 3.0] },
+  'powering-down': { y: [2, 0.8], rot: [2, 0.7] },
+};
 
 function rings() {
   return current.map((ring, e) => ring.map((p, i) => [p[0] + (target[e][i][0] - p[0]) * clamp(morph, 0, 1), p[1] + (target[e][i][1] - p[1]) * clamp(morph, 0, 1)]));
@@ -3185,6 +3228,9 @@ function chooseExpression(index) {
   bodySprings.rotate.v = (perf.rotate ?? 0) * 0.18;
   bodySprings.scaleX.v = ((perf.scaleX ?? 1) - 1) * 0.25;
   bodySprings.scaleY.v = ((perf.scaleY ?? 1) - 1) * 0.25;
+  // 表情配套动作：状态有专属反应用状态的，否则用表情编号循环动作
+  const actType = STATE_REACTION[activeState] || EXPR_ACTIONS[index % EXPR_ACTIONS.length];
+  if (actType !== 'none') reaction = { type: actType, t: 0, dur: 620 };
   // 切换时快速眨眼 + 眼睛脉冲
   eyePulse = 1;
   blink();
@@ -3208,14 +3254,22 @@ function frame(now) {
   // 眼睛脉冲衰减
   eyePulse = Math.max(0, eyePulse - dt * 3.2);
   const pulseScale = 1 + Math.sin(eyePulse * Math.PI) * 0.14;
+  // 状态持续循环动作（眼睛扫描）
+  const loop = STATE_LOOP[activeState] || null;
+  let loopEyeX = 0, loopEyeY = 0;
+  if (loop) {
+    const t = now / 1000;
+    if (loop.eyeX) loopEyeX = Math.sin(t * loop.eyeX[1]) * loop.eyeX[0];
+    if (loop.eyeY) loopEyeY = Math.sin(t * loop.eyeY[1]) * loop.eyeY[0];
+  }
   shown.forEach((ring, i) => {
     const c = centroid(ring),
       base = Math.asin(clamp((c[0] - 114.2705) / 105, -1, 1)),
       longitude = base + rad,
       depth = Math.cos(longitude),
       perspective = Math.max(depth, .02) / Math.max(Math.cos(base), .02),
-      x = 114.2705 + 105 * Math.sin(longitude) + gazeX,
-      y = c[1] + gazeY;
+      x = 114.2705 + 105 * Math.sin(longitude) + gazeX + loopEyeX,
+      y = c[1] + gazeY + loopEyeY;
     eyeEls[i].setAttribute('d', smoothRing(ring));
     eyeEls[i].setAttribute('transform', `translate(${x} ${y}) scale(${clamp(perspective, .02, 2.4) * pulseScale} ${bs}) translate(${-c[0]} ${-c[1]})`);
     eyeEls[i].style.opacity = depth > .02 ? '1' : '0';
@@ -3258,10 +3312,21 @@ function frame(now) {
     if (p >= 1) reaction = null;
   }
 
-  const finalY = bodyY + rY + breathY;
-  const finalRot = bodyRot + rRot + breathRot + tiltVal;
-  const finalSX = bodySX * rSX * rScale * breathScale;
-  const finalSY = bodySY * rSY * rScale * (2 - breathScale);  // 体积守恒
+  // 状态持续循环动作（身体）
+  let loopY = 0, loopRot = 0, loopSX = 1, loopSY = 1;
+  if (loop) {
+    const t = now / 1000;
+    if (loop.y) loopY = Math.sin(t * loop.y[1]) * loop.y[0];
+    if (loop.rot) loopRot = Math.sin(t * loop.rot[1]) * loop.rot[0];
+    if (loop.sx) loopSX = 1 + Math.sin(t * loop.sx[1]) * loop.sx[0];
+    if (loop.sy) loopSY = 1 + Math.sin(t * loop.sy[1]) * loop.sy[0];
+    if (loop.spin) loopRot = (now * 0.05) % 360;  // 持续旋转
+  }
+
+  const finalY = bodyY + rY + breathY + loopY;
+  const finalRot = bodyRot + rRot + breathRot + tiltVal + loopRot;
+  const finalSX = bodySX * rSX * rScale * breathScale * loopSX;
+  const finalSY = bodySY * rSY * rScale * (2 - breathScale) * loopSY;  // 体积守恒
 
   springGroup.setAttribute('transform',
     `translate(0 ${finalY.toFixed(2)}) rotate(${finalRot.toFixed(2)} 114 114) scale(${finalSX.toFixed(3)} ${finalSY.toFixed(3)})`);

@@ -146,6 +146,27 @@ try {
   console.log('点击反应测试异常:', e.message);
 }
 
+// ---- 持续状态动作检查（bouncing 状态 y 波动应远超呼吸幅度） ----
+try {
+  // 触发 bouncing 状态（通过 actions 区的 state 按钮点击）
+  const actionBtn = { closest: () => ({ dataset: { state: 'bouncing' } }) };
+  getEl('actions').listeners.click && getEl('actions').listeners.click({ target: actionBtn });
+  // 跑 60 帧收集 transform y 值
+  const ys = [];
+  for (let i = 0; i < 60 && global.__raf; i++) {
+    global.__now += 33.4;
+    const fnY = global.__raf; global.__raf = null; fnY(global.__now);
+    const tf = getEl('spring-group').attrs.transform || '';
+    const m = tf.match(/translate\(0 (-?[\d.]+)\)/);
+    if (m) ys.push(parseFloat(m[1]));
+  }
+  const range = ys.length > 1 ? Math.max(...ys) - Math.min(...ys) : 0;
+  console.log('bouncing 状态持续动作 y 波动范围:', range.toFixed(1), range > 6 ? '✅ 持续弹跳' : '❌ 无持续动作');
+  console.log('loop NaN:', ys.some(isNaN) ? '❌ 有' : '✅ 无');
+} catch (e) {
+  console.log('持续状态动作测试异常:', e.message);
+}
+
 // ---- 分享卡渲染测试 ----
 try {
   const createWork = getEl('create-work');
