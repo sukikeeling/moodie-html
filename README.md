@@ -135,3 +135,7 @@ clone 上游仓库后，把 `DATA_SRC` 改成你的路径再 `python build.py`�
 ## 📄 协议
 
 MIT License。数据与动画逻辑来自 LaoA-GrokBot（MIT）。
+
+## 仓库声明
+
+本仓库的署名与参考规范见 [NOTICE](NOTICE)：参考、借鉴或改造本仓库时，请标明来源 sukikeeling/moodie-html。
